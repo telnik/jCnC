@@ -29,64 +29,64 @@ from jnpr.junos.utils.start_shell import StartShell
 from db_manip import dbmanager
 
 def cliparser_help():
-	print("""
-        kvargs 
-                mode = [ configure | software | cli | info | host | group | help ]
-                host = [ <host-id> | <group-id> | all ] 
-                action = [ < depends on mode, see below > ]
-                param = [ < depends on mode, see below > ]
-        
-        mode descriptions and options
-                configure:      manipuate juniper configuration on <host> - actions:
-                                commit - commit changes
-                                        param - timeout-minutes, if ommited, default value
-                                commit_check - perform the commit check operation 
-                                        param - rollback number 0-50
-                                load - load changes into the candidate config
-                                save - save the configuration to the local host
-                                        param is path to save file
-                                lock - take an exclusive lock on the candidate config
-                                unlock - release the exclusive lock
-                                rollback - perform the load rollback command
-                                        param - rollback number 0-50
-                software:       perform software updates 
-                                install - perform entire software install
-                                        param - location of file to install on local host
-                                rollback - same as 'request softare rollback'
-                cli:    run juniper cli commands on <host> - actions:
-                                terminal        param is cli command in quotes
-                                file    param is path to file with juniper commands
-                host:   manipulate host database - actions:
-                                add     param - user,,,password
-                                modify_id
-                                modify_pass
-                                modify_user
-                                        param for modify_* is the new value
-                                delete
-                                show
-                
-                group:  manipulate groups  
-                        if host is group - actions:
-                                create
-                                add     param - host-id
-                                remove  param - host-id
-                                delete
-                                show
-                        if host is host - actions:
-                                join    param - group-id
-                                leave   param - group-id
-                info:   get info about <host> - actions:
-                                active-ports
-                                hardware
-                                alarms
-                                ...etc... more to come
-                help:           Show menu options
-
-        host descriptions and options
-                <host-id>:      apply actions to this host id found in the database
-                <group-id>:     apply actions to the hosts found in this group
-                all:            apply actions to all hosts in the database
-""")
+	return "\n\
+        kvargs \n\
+                mode = [ configure | software | cli | info | host | group | help ]\n\
+                host = [ <host-id> | <group-id> | all ] \n\
+                action = [ < depends on mode, see below > ]\n\
+                param = [ < depends on mode, see below > ]\n\
+        \n\
+        mode descriptions and options\n\
+                configure:      manipuate juniper configuration on <host> - actions:\n\
+                                commit - commit changes\n\
+                                        param - timeout-minutes, if ommited, default value\n\
+                                commit_check - perform the commit check operation \n\
+                                        param - rollback number 0-50\n\
+                                load - load changes into the candidate config\n\
+                                save - save the configuration to the local host\n\
+                                        param is path to save file\n\
+                                lock - take an exclusive lock on the candidate config\n\
+                                unlock - release the exclusive lock\n\
+                                rollback - perform the load rollback command\n\
+                                        param - rollback number 0-50\n\
+                software:       perform software updates \n\
+                                install - perform entire software install\n\
+                                        param - location of file to install on local host\n\
+                                rollback - same as 'request softare rollback'\n\
+                cli:    run juniper cli commands on <host> - actions:\n\
+                                terminal        param is cli command in quotes\n\
+                                file    param is path to file with juniper commands\n\
+                host:   manipulate host database - actions:\n\
+                                add     param - user,password\n\
+                                modify_id\n\
+                                modify_pass\n\
+                                modify_user\n\
+                                        param for modify_* is the new value\n\
+                                delete\n\
+                                show\n\
+                \n\
+                group:  manipulate groups  \n\
+                        if host is group - actions:\n\
+                                create\n\
+                                add     param - host-id\n\
+                                remove  param - host-id\n\
+                                delete\n\
+                                show\n\
+                        if host is host - actions:\n\
+                                join    param - group-id\n\
+                                leave   param - group-id\n\
+                info:   get info about <host> - actions:\n\
+                                active-ports\n\
+                                hardware\n\
+                                alarms\n\
+                                ...etc... more to come\n\
+                help:           Show menu options\n\
+\n\
+        host descriptions and options\n\
+                <host-id>:      apply actions to this host id found in the database\n\
+                <group-id>:     apply actions to the hosts found in this group\n\
+                all:            apply actions to all hosts in the database\n\
+\n"
 
 class jCommand(threading.Thread):
 	def __init__(self, **kvargs):
@@ -194,19 +194,25 @@ def cliparser(**kvargs):
 	action = kvargs.get('action', False)
 	param = kvargs.get('param', False)
 
+	mode = str(mode)
+	host = str(host)
+	action = str(action)
+	param = str(param)
+
 	ishost = False
 	jdb = dbmanager()
-	# find and initilize device objects
-	if host == "all":
-		host = jdb.show_all()
-		ishost = "all"
-	else:
-		if jdb.is_host(host):
-			host = jdb.show_host(host)
-			ishost = "host"
-		elif jdb.is_group(host):
-			host = jdb.show_group(host)
-			ishost = "group"
+	# find and initilize device objects if not a create or an add
+	if action != "create" and action != "add":
+		if host == "all":
+			host = jdb.show_all()
+			ishost = "all"
+		else:
+			if jdb.is_host(host):
+				host = jdb.show_host(host)
+				ishost = "host"
+			elif jdb.is_group(host):
+				host = jdb.show_group(host)
+				ishost = "group"
 
 	if not mode:
 		return "A mode of operation must be specified"
@@ -219,24 +225,40 @@ def cliparser(**kvargs):
 	elif mode == "host":
 		if action == "add":
 			paramS = param.split(",")
+			return paramS[1]
 			if jdb.create_host(host, paramS[0], paramS[1]):
 				return "Host Successfully Created"
 			else:
 				return "Host Creation Failed"
 		elif action == "modify_id":
-			if jdb.modify_host_name(host, param):
-				return "Host Successfully Modified"
-			else:
-				return "Host Modification Failed"
+			result = str('')
+			for hostid in host:
+				if jdb.modify_host_name(hostid[0], param):
+					result += "\n" + hostid[0] + " Host Successfully Modified"
+				else:
+					result += "\n" + hostid[0] + " Host Modification Failed"
+			return result
 		elif action == "modify_pass":
-			if jdb.modify_host_pass(host, param):
+			if jdb.modify_host_pass(host[0][0], param):
 				return "Host Successfully Modified"
 		elif action == "modify_user":
-			jdb.modify_host_user(host, param)
+			result = str('')
+			for hostid in host:
+				if jdb.modify_host_user(hostid[0], param):
+					result += "\n" + hostid[0] + " User Successfully Modified"
+				else:
+					result += "\n" + hostid[0] + " User Modification Failed"
+			return result
 		elif action == "delete":
 			jdb.delete_host(host, param)
 		elif action == "show":
-			return jdb.show_host(host)
+			result = str('')
+			for hostid in host:
+				result += "\nHostname : " + str(hostid[0])
+				result += "\nUsername : " + str(hostid[1])
+				result += "\nPassword : " + str(hostid[2])
+				result += "\n"
+			return result
 		else:
 			return "Host Action not found"
 	elif mode == "group":
@@ -265,13 +287,33 @@ def cliparser(**kvargs):
 				return "Group not understood"
 	elif mode == "help":
 		return cliparser_help()
+	else:
+		return "Mode not found"
 
-parser = argparse.ArgumentParser(description='Parallel Juniper Command Execution', epilog="This program runs like an AK-47 with the safty off, be careful what you tell it to do.  It's very easy to destroy all your switches")
+parser = argparse.ArgumentParser(description='Parallel Juniper Command Execution', epilog="For more detailed help use --mode help")
 parser.add_argument('-m', '--mode', nargs=1, help="Mode of operation", required=True)
 parser.add_argument('-d', '--device', nargs=1, help="Device/Group/All to operate on")
 parser.add_argument('-a', '--action', nargs=1, help="Action inside the mode of operation")
 parser.add_argument('-p', '--param', nargs=1, help="Additional information required by action")
 
 args = parser.parse_args()
+host = args.device
+action = args.action
+param = args.param
 
-print cliparser(mode=args.mode, host=args.device, action=args.action, param=args.param)
+if host == None:
+	host = False
+else:
+	host = host[0]
+if action == None:
+	action = False
+else:
+	action = action[0]
+if param == None:
+	param = False
+else:
+	param = param[0]
+
+print cliparser(mode=args.mode[0], host=host, action=action, param=param)
+
+
