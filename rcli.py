@@ -66,13 +66,10 @@ def cliparser_help():
                                 show\n\
                 \n\
                 group:  manipulate groups  \n\
-                        if host is group - actions:\n\
                                 create\n\
-                                add     param - host-id\n\
-                                remove  param - host-id\n\
                                 delete\n\
-                                show\n\
-                        if host is host - actions:\n\
+                     		show_groups\n\
+				show_members	param - group-id\n\
                                 join    param - group-id\n\
                                 leave   param - group-id\n\
                 info:   get info about <host> - actions:\n\
@@ -95,7 +92,7 @@ class jCommand(threading.Thread):
 		self.param = kvargs.get('param', False)
 		self.host = kvargs.get('host', False)
 		self.user = kvargs.get('user', False)
-		self.passw = kvargs.get('pass', False)
+		self.passw = kvargs.get('passw', False)
 		self.result = kvargs.get('host') + " reply: "
 		threading.Thread.__init__(self)
 
@@ -103,74 +100,77 @@ class jCommand(threading.Thread):
 		return self.result
 
 	def run(self):
+		# import pdb; pdb.set_trace() # dbg
 		try:
-			dev = Device(host=host, user=user, password=passw)
+			dev = Device(host=self.host, user=self.user, password=self.passw)
 			dev.open()
 
-			if not mode:
+			if not self.mode:
 				self.result += "A mode of operation must be specified"
-			elif mode == "configure":
+			elif self.mode == "configure":
 				confc = Config(dev)
-				if action == "commit":
+				if self.action == "commit":
 					self.result += confc.commit(confirm=True, comment="Commited " + str( datetime.datetime.now() ) + " by jCnC")
-				elif action == "commit_check":
+				elif self.action == "commit_check":
 					self.result += confc.commit_check()
-				elif action == "diff":
+				elif self.action == "diff":
 					self.result += confc.diff(param)
-				elif action == "load":
+				elif self.action == "load":
 					self.result += confc.load(path=param, overwrite=True, format='conf')
-				elif action == "lock":
+				elif self.action == "lock":
 					self.result += confc.lock()
-				elif action == "rescue":
+				elif self.action == "rescue":
 					self.result += confc.rescue(param)
-				elif action == "rollback":
+				elif self.action == "rollback":
 					self.result += confc.rollback(param)
-				elif action == "save":
+				elif self.action == "save":
 					self.result += "Not implemented yet" 
-				elif action == "unlock":
+				elif self.action == "unlock":
 					self.result += confc.unlock()
 				else:
 					self.result += "Configuration Action not found"
-			elif mode == "software":
+			elif self.mode == "software":
 				softw = SW(dev)
-				if action == "install":
+				if self.action == "install":
+					hash = str('')
 					with open(param+'.md5') as hashfile:
 						hash = hashfile.read()
 					hashfile.closed()
 					self.action += softw.install(param, remote_path='/var/tmp', progress=dev, validate=False, checksum=hash, cleanfs=False, no_copy=False, timout=1800) 
 				elif action == "rollback":
 					self.action += softw.rollback()
-			elif mode == "cli":
+			elif self.mode == "cli":
 				shell = StartShell(dev)
 				shell.open()
-				if action == "terminal":
+				if self.action == "terminal":
 					self.result += shell.run(param)
-				elif action == "file":
+				elif self.action == "file":
 					self.result += "\n"
 					cfile = open(param, 'r')
 					for line in cfile:
 						self.result += shell.run(line)
 				shell.close()
-
-			elif mode == "info":
+			elif self.mode == "info":
+				import pdb; pdb.set_trace() # dbg
 				shell = StartShell(dev)
 				shell.open()
-				if action == "alarms":
+				if self.action == "alarms":
 					self.result += shell.run("show chassis alarms")
-				elif action == "active_ports":
+				elif self.action == "active_ports":
 					self.result += shell.run('show interfaces terse | except "\.0" | except down')
 				else:
 					self.result += "Information Action not found"
+				shell.close()
 			else:
 				self.result = "Operation Mode not found"
 		except:
-			self.result += " encountered an exception: " + sys.exc_info()[0] 
+			print "Error:\n" + str(sys.exc_info()[0]) + "\n" + str(sys.exc_info()[1]) + "\n" + str(sys.exc_info()[2])
 			
 	
 def run_commands(hosts, mode, action, param):
 	def prod(q, hosts):
 		for host in hosts:
-			thread = jCommand(host=host[0], user=host[1], passw=[2], mode=mode, action=action, param=param)
+			thread = jCommand(host=host[0], user=host[1], passw=host[2], mode=mode, action=action, param=param)
 			thread.start()
 			q.put(thread, True)
 
@@ -202,7 +202,7 @@ def cliparser(**kvargs):
 	ishost = False
 	jdb = dbmanager()
 	# find and initilize device objects if not a create or an add
-	if action != "create" and action != "add":
+	if mode != "group" and action != "create" and action != "add":
 		if host == "all":
 			host = jdb.show_all()
 			ishost = "all"
@@ -211,7 +211,7 @@ def cliparser(**kvargs):
 				host = jdb.show_host(host)
 				ishost = "host"
 			elif jdb.is_group(host):
-				host = jdb.show_group(host)
+				host = jdb.show_group_members(host)
 				ishost = "group"
 
 	if not mode:
@@ -225,7 +225,6 @@ def cliparser(**kvargs):
 	elif mode == "host":
 		if action == "add":
 			paramS = param.split(",")
-			return paramS[1]
 			if jdb.create_host(host, paramS[0], paramS[1]):
 				return "Host Successfully Created"
 			else:
@@ -262,33 +261,47 @@ def cliparser(**kvargs):
 		else:
 			return "Host Action not found"
 	elif mode == "group":
-		if ishost == "host":
-			if action == "join":
-				return jdb.attach(param, host)
-			elif action == "leave":
-				return jdb.detach(param, host)
-			else:
-				return "Action not understood"
-		elif ishost == "group":
-			if action == "add":
+		if action == "join":
+			if jdb.is_member(host, param) or jdb.is_member(param, host):
+				return "Already a member"
+			elif jdb.is_group(host) and jdb.is_host(param):
 				return jdb.attach(host, param)
-			elif action == "remove":
-				return jdb.detach(host, param)
-			elif action == "delete":
-				return jdb.delete_group(host)
-			elif action == "show":
-				return jdb.show_group(host)
+			elif jdb.is_group(param) and jdb.is_host(host):
+				return jdb.attach(param, host)
+			return "A vaild group and host must be provided"
+		elif action == "leave":
+			if jdb.is_member(host, param) or jdb.is_member(param, host):
+				if jdb.is_group(host) and jdb.is_host(param):
+					return jdb.detach(host, param)
+				if jdb.is_group(param) and jdb.is_host(host):
+					return jdb.detach(param, host)
+				return "A vaild group and host must be provided"
 			else:
-				return "Action not understood"
+				return "Host not a member"
+		elif action == "delete":
+			return jdb.delete_group(host)
+		elif action == "show_group_members":
+			if jdb.is_group(host) == False:
+				return host + " is not a group"
+			result = str('')
+			for hostid in host:
+				result += "\n" + hostid[0]
+			return result
+		elif action == "create":
+			return jdb.create_group(host)
+		elif action == "show_groups":
+				host = jdb.show_group_members(host)
+                                result = "Groups:"
+                                groups = jdb.show_group_names()
+                                for group in groups:
+                                        result += "\n" + group[0]
+                                return result
 		else:
-			if action == "create":
-				return jdb.create_group(host)
-			else:
-				return "Group not understood"
+			return "Action not understood"
 	elif mode == "help":
 		return cliparser_help()
 	else:
-		return "Mode not found"
+		return "Mode " + mode + " not found"
 
 parser = argparse.ArgumentParser(description='Parallel Juniper Command Execution', epilog="For more detailed help use --mode help")
 parser.add_argument('-m', '--mode', nargs=1, help="Mode of operation", required=True)

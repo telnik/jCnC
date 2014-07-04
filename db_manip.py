@@ -1,45 +1,44 @@
 #!/usr/bin/python2
 
-import sys, sqlite3, argparse 
+import sys, sqlite3, argparse
 
 class dbmanager:
 	"""
 	DataStore Class for Juniper Devices
 	Stores hosts, thier usernames and passwords, and groups.
 	Groupes are lists of hosts with names.
-
-	Methods:
-		create_host -- insert a new host
-		modify_host_name -- modify a hosts host name
-		modify_host_user -- modify a hosts user name
-		modify_host_pass -- modify a hosts password
-		delete_host -- delete a host
-
-		show_host -- retrieve all the info about the host
-		show_all  -- retrieve all info about all hosts
-
-		create_group -- create a new group by name
-		modify_group_name -- change the name of an exsisting group
-		delete_group -- delete a group
 	
-		show_group -- retrieve all info about all hosts in the group
+	Methods:
+	create_host -- insert a new host
+	modify_host_name -- modify a hosts host name
+	modify_host_user -- modify a hosts user name
+	modify_host_pass -- modify a hosts password
+	delete_host -- delete a host
 
-		create_db -- initialize a new database
+	show_host -- retrieve all the info about the host
+	show_all -- retrieve all info about all hosts
 
-		is_host -- returns true if string matches a hostname
-		is_group -- returns true if string matches a groupname
-		is_member -- returns true if host is already in group
+	create_group -- create a new group by name
+	modify_group_name -- change the name of an exsisting group
+	delete_group -- delete a group
+	show_group -- retrieve all info about all hosts in the group
+
+	create_db -- initialize a new database
+
+	is_host -- returns true if string matches a hostname
+	is_group -- returns true if string matches a groupname
+	is_member -- returns true if host is already in group
 	"""
 
 	def __init__(self):
 		self.db_connection = sqlite3.connect("/var/local/pyezd/store.db", isolation_level=None)
-                self.db_cursor = self.db_connection.cursor()
-		
+		self.db_cursor = self.db_connection.cursor()
+
 	def __exit__(self):
 		self.db_connection.close()
 
 	def create_db(self):
-		self.db_cursor.execute("CREATE TABLE devices (hostname text PRIMARY KEY ON CONFLICT ABORT, username text, password text) ") 
+		self.db_cursor.execute("CREATE TABLE devices (hostname text PRIMARY KEY ON CONFLICT ABORT, username text, password text) ")
 		self.db_cursor.execute("CREATE TABLE relations (groupname text, hostname text)")
 		self.db_cursor.execute("CREATE TABLE groups (groupname text PRIMARY KEY ON CONFLICT ABORT)")
 
@@ -57,28 +56,28 @@ class dbmanager:
 
 	def is_member(self, hostname, groupname):
 		self.db_cursor.execute("Select hostname FROM relations WHERE hostname = ? AND groupname = ?", (hostname, groupname))
-                if not self.db_cursor.fetchall():
-                        return False
-                return True
+		if not self.db_cursor.fetchall():
+			return False
+		return True
 
 	def create_host(self, host, user, passw):
 		if self.is_host(host):
 			return False
-		self.db_cursor.execute("INSERT INTO devices VALUES (?, ?, ?)", ( host, user, passw ) )  
+		self.db_cursor.execute("INSERT INTO devices VALUES (?, ?, ?)", ( host, user, passw ) )
 		return True
 
 	def modify_host_name(self, host, newname):
 		if self.is_host(newname):
 			return False
-		self.db_cursor.execute("UPDATE devices SET hostname = ? where hostname = ?", (host, newname) )
+		self.db_cursor.execute("UPDATE devices SET hostname = ? where hostname = ?", (newname, host) )
 		return True
 
 	def modify_host_user(self, host, newuser):
-		self.db_cursor.execute("UPDATE devices SET username = ? where hostname = ?", (host, newuser) )
+		self.db_cursor.execute("UPDATE devices SET username = ? where hostname = ?", (newuser, host) )
 		return True
 
 	def modify_host_pass(self, host, newpass):
-		self.db_cursor.execute("UPDATE devices SET password = ? where hostname = ?", (host, newpass) )
+		self.db_cursor.execute("UPDATE devices SET password = ? where hostname = ?", (newpass, host) )
 		return True
 
 	def delete_host(self, host):
@@ -108,9 +107,9 @@ class dbmanager:
 
 	def modify_gname(self, oldname, newname):
 		if self.is_group(newname):
-                        return False
+			return False
 		if self.is_group(newname):
-                        return False
+			return False
 		self.db_cursor.execute("UPDATE groups SET groupname = ? where groupname = ?", (newname, oldname))
 		return True
 
@@ -126,5 +125,3 @@ class dbmanager:
 
 	def detach(self, hostname, groupname):
 		self.db_cursor.execute("DELETE FROM relations WHERE hostname = ? AND groupname = ?", (hostname, groupname))
-
-
