@@ -26,6 +26,7 @@ import sys, threading, argparse
 from Queue import Queue
 from jnpr.junos import Device
 from jnpr.junos.utils.start_shell import StartShell
+from jnpr.junos.utils.config import Config
 from db_manip import dbmanager
 
 def cliparser_help():
@@ -101,71 +102,74 @@ class jCommand(threading.Thread):
 
 	def run(self):
 		# import pdb; pdb.set_trace() # dbg
-		try:
-			dev = Device(host=self.host, user=self.user, password=self.passw)
-			dev.open()
+		dev = Device(host=self.host, user=self.user, password=self.passw)
+		dev.open()
 
-			if not self.mode:
-				self.result += "A mode of operation must be specified"
-			elif self.mode == "configure":
-				confc = Config(dev)
-				if self.action == "commit":
-					self.result += confc.commit(confirm=True, comment="Commited " + str( datetime.datetime.now() ) + " by jCnC")
-				elif self.action == "commit_check":
-					self.result += confc.commit_check()
-				elif self.action == "diff":
-					self.result += confc.diff(param)
-				elif self.action == "load":
-					self.result += confc.load(path=param, overwrite=True, format='conf')
-				elif self.action == "lock":
-					self.result += confc.lock()
-				elif self.action == "rescue":
-					self.result += confc.rescue(param)
-				elif self.action == "rollback":
-					self.result += confc.rollback(param)
-				elif self.action == "save":
-					self.result += "Not implemented yet" 
-				elif self.action == "unlock":
-					self.result += confc.unlock()
+		if not self.mode:
+			self.result += "A mode of operation must be specified"
+		elif self.mode == "configure":
+			confc = Config(dev)
+			if self.action == "commit":
+				self.result += confc.commit(confirm=True, comment="Commited " + str( datetime.datetime.now() ) + " by jCnC")
+			elif self.action == "commit_check":
+				if confc.commit_check():
+					self.result += "Commit Check Succeeds"
 				else:
-					self.result += "Configuration Action not found"
-			elif self.mode == "software":
-				softw = SW(dev)
-				if self.action == "install":
-					hash = str('')
-					with open(param+'.md5') as hashfile:
-						hash = hashfile.read()
-					hashfile.closed()
-					self.action += softw.install(param, remote_path='/var/tmp', progress=dev, validate=False, checksum=hash, cleanfs=False, no_copy=False, timout=1800) 
-				elif action == "rollback":
-					self.action += softw.rollback()
-			elif self.mode == "cli":
-				shell = StartShell(dev)
-				shell.open()
-				if self.action == "terminal":
-					self.result += shell.run(param)
-				elif self.action == "file":
-					self.result += "\n"
-					cfile = open(param, 'r')
-					for line in cfile:
-						self.result += shell.run(line)
-				shell.close()
-			elif self.mode == "info":
-				import pdb; pdb.set_trace() # dbg
-				shell = StartShell(dev)
-				shell.open()
-				if self.action == "alarms":
-					self.result += shell.run("show chassis alarms")
-				elif self.action == "active_ports":
-					self.result += shell.run('show interfaces terse | except "\.0" | except down')
-				else:
-					self.result += "Information Action not found"
-				shell.close()
+					self.result += "Commit Check Failed"
+			elif self.action == "diff":
+				x = int(self.param)
+				self.result += confc.diff() #self.param)
+			elif self.action == "load":
+				self.result += confc.load(path=param, overwrite=True, format='conf')
+			elif self.action == "lock":
+				self.result += confc.lock()
+			elif self.action == "rescue":
+				self.result += confc.rescue(param)
+			elif self.action == "rollback":
+				self.result += confc.rollback(param)
+			elif self.action == "save":
+				self.result += "Not implemented yet" 
+			elif self.action == "unlock":
+				self.result += confc.unlock()
 			else:
-				self.result = "Operation Mode not found"
-		except:
-			print "Error:\n" + str(sys.exc_info()[0]) + "\n" + str(sys.exc_info()[1]) + "\n" + str(sys.exc_info()[2])
-			
+				self.result += "Configuration Action not found"
+		elif self.mode == "software":
+			softw = SW(dev)
+			if self.action == "install":
+				hash = str('')
+				with open(param+'.md5') as hashfile:
+					hash = hashfile.read()
+				hashfile.closed()
+				self.action += softw.install(param, remote_path='/var/tmp', progress=dev, validate=False, checksum=hash, cleanfs=False, no_copy=False, timout=1800) 
+			elif action == "rollback":
+				self.action += softw.rollback()
+		elif self.mode == "cli":
+			shell = StartShell(dev)
+			shell.open()
+			if self.action == "terminal":
+				self.result += shell.run(self.param)
+			elif self.action == "file":
+				self.result += "\n"
+				cfile = open(self.param, 'r')
+				for line in cfile:
+					self.result += "\n" + shell.run(line)
+			shell.close()
+		elif self.mode == "info":
+			import pdb; pdb.set_trace() # dbg
+			shell = StartShell(dev)
+			shell.open()
+			if self.action == "alarms":
+				self.result += shell.run("show chassis alarms")
+			elif self.action == "active_ports":
+				self.result += shell.run('show interfaces terse | except "\.0" | except down')
+			else:
+				self.result += "Information Action not found"
+			shell.close()
+		else:
+			self.result = "Operation Mode not found"
+
+		dev.close()
+
 	
 def run_commands(hosts, mode, action, param):
 	def prod(q, hosts):
@@ -187,6 +191,10 @@ def run_commands(hosts, mode, action, param):
 	cons_thread.start()
 	prod_thread.join()
 	cons_thread.join()
+	result = str('')
+	for line in finished:
+		result += '\n' + line
+	return result
 
 def cliparser(**kvargs):
 	mode = kvargs.get('mode', False)
@@ -221,7 +229,7 @@ def cliparser(**kvargs):
 			hashpath = param + '.md5'
 			hashfile = open(hashpath, 'w')
 			hashfile(SW.local_md5(param))
-		run_commands(host, mode, action, param)
+		return run_commands(host, mode, action, param)
 	elif mode == "host":
 		if action == "add":
 			paramS = param.split(",")
@@ -239,7 +247,7 @@ def cliparser(**kvargs):
 			return result
 		elif action == "modify_pass":
 			if jdb.modify_host_pass(host[0][0], param):
-				return "Host Successfully Modified"
+				return "Password Successfully Modified"
 		elif action == "modify_user":
 			result = str('')
 			for hostid in host:
@@ -249,7 +257,12 @@ def cliparser(**kvargs):
 					result += "\n" + hostid[0] + " User Modification Failed"
 			return result
 		elif action == "delete":
-			jdb.delete_host(host, param)
+			result = str('')
+			for hostid in host:
+				if jdb.delete_host(hostid[0], param):
+					result += "\n" + hostid[0] + " Deleted"
+				else:
+					result += "\n" + "Could not delete " + hostid[0] 
 		elif action == "show":
 			result = str('')
 			for hostid in host:

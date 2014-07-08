@@ -113,8 +113,12 @@ class dbmanager:
 		self.db_cursor.execute("UPDATE groups SET groupname = ? where groupname = ?", (newname, oldname))
 		return True
 
-	def show_group(self, gname):
+	def show_group_members(self, gname):
 		self.db_cursor.execute("SELECT devices.hostname, devices.username, devices.password FROM devices, relations, groups WHERE devices.hostname = relations.hostname AND relations.groupname = groups.groupname AND groups.groupname = ?", (gname,))
+		return self.db_cursor.fetchall()
+
+	def show_group_names(self):
+		self.db_cursor.execute("SELECT groupname FROM groups")
 		return self.db_cursor.fetchall()
 
 	def attach(self, hostname, groupname):
