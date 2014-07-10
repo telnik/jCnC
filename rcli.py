@@ -22,10 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-import sys, threading, argparse
+import sys, threading, argparse, paramiko
 from Queue import Queue
 from jnpr.junos import Device
-from jnpr.junos.utils.start_shell import StartShell
 from jnpr.junos.utils.config import Config
 from db_manip import dbmanager
 
@@ -70,7 +69,7 @@ def cliparser_help():
                                 create\n\
                                 delete\n\
                      		show_groups\n\
-				show_members	param - group-id\n\
+				show_members\n\
                                 join    param - group-id\n\
                                 leave   param - group-id\n\
                 info:   get info about <host> - actions:\n\
@@ -94,16 +93,26 @@ class jCommand(threading.Thread):
 		self.host = kvargs.get('host', False)
 		self.user = kvargs.get('user', False)
 		self.passw = kvargs.get('passw', False)
-		self.result = kvargs.get('host') + " reply: "
+		self.result = kvargs.get('host') + " reply:\n"
 		threading.Thread.__init__(self)
 
 	def get_result(self):
 		return self.result
 
+	def start_shell(self):
+		shell = paramiko.SSHClient()
+		shell.set_missing_host_key_policy( paramiko.AutoAddPolicy() )
+		shell.connect(self.host, username=self.user, password=self.passw)
+		return shell
+
 	def run(self):
 		# import pdb; pdb.set_trace() # dbg
 		dev = Device(host=self.host, user=self.user, password=self.passw)
-		dev.open()
+		try:
+			dev.open(auto_probe=7)
+		except:
+			self.result += "Could not connect to host\n"
+			return
 
 		if not self.mode:
 			self.result += "A mode of operation must be specified"
@@ -144,24 +153,42 @@ class jCommand(threading.Thread):
 			elif action == "rollback":
 				self.action += softw.rollback()
 		elif self.mode == "cli":
-			shell = StartShell(dev)
-			shell.open()
+			shell = self.start_shell()
 			if self.action == "terminal":
-				self.result += shell.run(self.param)
+				stdin, stdout, stderr = shell.exec_command("cli")
+				stdin.write(self.param + '\n')
+				stdin.write("exit\n")
+				stdin.flush()
+				for line in stdout.readlines():
+					self.result += line 
 			elif self.action == "file":
 				self.result += "\n"
+				stdin, stdout, stderr = shell.exec_command("cli")
 				cfile = open(self.param, 'r')
 				for line in cfile:
-					self.result += "\n" + shell.run(line)
+					stdin.write(line + '\n')
+				stdin.write("exit\n")
+				data = stdout.readlines()
+				for line in data:
+					self.result += "\n" + line
 			shell.close()
 		elif self.mode == "info":
-			import pdb; pdb.set_trace() # dbg
-			shell = StartShell(dev)
-			shell.open()
+			shell = self.start_shell()
 			if self.action == "alarms":
-				self.result += shell.run("show chassis alarms")
+				stdin, stdout, stderr = shell.exec_command("cli show chassis alarms")
+				data = stdout.readlines()
+				for line in data:
+					self.result += line
 			elif self.action == "active_ports":
-				self.result += shell.run('show interfaces terse | except "\.0" | except down')
+				stdin, stdout, stderr = shell.exec_command('cli show interfaces terse | grep -v  "\.0" | grep -v down')
+				data = stdout.readlines()
+				for line in data:
+					self.result += line
+			elif self.action == "inactive_ports":
+				stdin, stdout, stderr = shell.exec_command('cli show interfaces terse | grep -v  "\.0" | grep down')
+				data = stdout.readlines()
+				for line in data:
+					self.result += line
 			else:
 				self.result += "Information Action not found"
 			shell.close()
@@ -169,6 +196,7 @@ class jCommand(threading.Thread):
 			self.result = "Operation Mode not found"
 
 		dev.close()
+		self.result += "\n"
 
 	
 def run_commands(hosts, mode, action, param):
@@ -221,6 +249,8 @@ def cliparser(**kvargs):
 			elif jdb.is_group(host):
 				host = jdb.show_group_members(host)
 				ishost = "group"
+			else:
+				return "Hostname not found in database"
 
 	if not mode:
 		return "A mode of operation must be specified"
