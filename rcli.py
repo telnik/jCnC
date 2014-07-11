@@ -22,11 +22,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-import sys, threading, argparse, paramiko
+import sys, threading, argparse, paramiko, logging; 
 from Queue import Queue
 from jnpr.junos import Device
 from jnpr.junos.utils.config import Config
 from db_manip import dbmanager
+
+logging.getLogger('paramiko.transport').addHandler(logging.NullHandler())
 
 def cliparser_help():
 	return "\n\
@@ -35,7 +37,7 @@ def cliparser_help():
                 host = [ <host-id> | <group-id> | all ] \n\
                 action = [ < depends on mode, see below > ]\n\
                 param = [ < depends on mode, see below > ]\n\
-        \n\
+\n\
         mode descriptions and options\n\
                 configure:      manipuate juniper configuration on <host> - actions:\n\
                                 commit - commit changes\n\
@@ -64,7 +66,7 @@ def cliparser_help():
                                         param for modify_* is the new value\n\
                                 delete\n\
                                 show\n\
-                \n\
+\n\
                 group:  manipulate groups  \n\
                                 create\n\
                                 delete\n\
