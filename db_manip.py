@@ -90,7 +90,7 @@ class dbmanager:
 		return self.db_cursor.fetchall()
 
 	def show_all(self):
-		self.db_cursor.execute("SELECT * FROM devices")
+		self.db_cursor.execute("SELECT * FROM devices ORDER BY hostname")
 		return self.db_cursor.fetchall()
 
 	def create_group(self, gname):

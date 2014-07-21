@@ -240,7 +240,7 @@ def cliparser(**kvargs):
 	ishost = False
 	jdb = dbmanager()
 	# find and initilize device objects if not a create or an add
-	if mode != "group" and action != "create" and action != "add":
+	if mode != "help" and mode != "group" and action != "create" and action != "add":
 		if host == "all":
 			host = jdb.show_all()
 			ishost = "all"
@@ -291,10 +291,11 @@ def cliparser(**kvargs):
 		elif action == "delete":
 			result = str('')
 			for hostid in host:
-				if jdb.delete_host(hostid[0], param):
+				if jdb.delete_host(hostid[0]):
 					result += "\n" + hostid[0] + " Deleted"
 				else:
 					result += "\n" + "Could not delete " + hostid[0] 
+			return result
 		elif action == "show":
 			result = str('')
 			for hostid in host:
