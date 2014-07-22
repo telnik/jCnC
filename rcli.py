@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-import sys, threading, argparse, paramiko, logging; 
+import sys, threading, argparse, paramiko, logging, os; 
 from Queue import Queue
 from jnpr.junos import Device
 from jnpr.junos.utils.config import Config
@@ -139,7 +139,22 @@ class jCommand(threading.Thread):
 			elif self.action == "rollback":
 				self.result += confc.rollback(param)
 			elif self.action == "save":
-				self.result += "Not implemented yet" 
+				shell = self.start_shell()
+				stdin, stdout, stderr = shell.exec_command("cli show configuration | cat")
+				config = ""
+				for line in stdout.readlines():
+					self.result += line
+					config += line
+				## check for host dir, create if not found
+				hostpath = self.host
+				if not os.path.exists(hostpath):
+					os.makedirs(hostpath)
+				hostpath += "/configuration"
+				## copy file into directory
+				with open(hostpath, 'w') as output:
+					output.write(config)
+				shell.exec_command("rm /tmp/configuration\n")
+				shell.close
 			elif self.action == "unlock":
 				self.result += confc.unlock()
 			else:
